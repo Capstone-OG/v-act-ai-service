@@ -11,10 +11,16 @@ Responsibilities:
 
 from __future__ import annotations
 
+import asyncio
 import os
+import sys
 import logging
 from functools import lru_cache
 from typing import TYPE_CHECKING
+
+# Fix for Windows: psycopg async requires WindowsSelectorEventLoopPolicy
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
@@ -48,9 +54,9 @@ if not DATABASE_URL:
 # ---------------------------------------------------------------------------
 # Model Constants
 # ---------------------------------------------------------------------------
-LLM_MODEL: str = "gemini-2.0-flash"
-EMBEDDING_MODEL: str = "models/text-embedding-004"
-EMBEDDING_DIMENSIONS: int = 768  # text-embedding-004 default output size
+LLM_MODEL: str = "gemini-3.6-flash"
+EMBEDDING_MODEL: str = "models/gemini-embedding-001"
+EMBEDDING_DIMENSIONS: int = 3072  # gemini-embedding-001 default output size
 
 # ---------------------------------------------------------------------------
 # Chunking Constants
@@ -72,15 +78,14 @@ COLLECTION_NAME: str = "rag_documents"
 def get_llm() -> ChatGoogleGenerativeAI:
     """Return a cached ChatGoogleGenerativeAI instance.
 
-    Uses ``gemini-2.0-flash`` with temperature=0 for deterministic,
+    Uses ``gemini-2.5-flash`` with temperature=0 for deterministic,
     context-grounded answers.
     """
     logger.info("Initializing LLM: %s", LLM_MODEL)
     return ChatGoogleGenerativeAI(
         model=LLM_MODEL,
-        google_api_key=GOOGLE_API_KEY,
+        api_key=GOOGLE_API_KEY,
         temperature=0,
-        convert_system_message_to_human=False,
     )
 
 
@@ -88,12 +93,12 @@ def get_llm() -> ChatGoogleGenerativeAI:
 def get_embeddings() -> GoogleGenerativeAIEmbeddings:
     """Return a cached GoogleGenerativeAIEmbeddings instance.
 
-    Uses ``models/text-embedding-004`` which outputs 768-dim vectors.
+    Uses ``models/gemini-embedding-001`` which outputs 3072-dim vectors.
     """
     logger.info("Initializing Embeddings: %s", EMBEDDING_MODEL)
     return GoogleGenerativeAIEmbeddings(
         model=EMBEDDING_MODEL,
-        google_api_key=GOOGLE_API_KEY,
+        api_key=GOOGLE_API_KEY,
     )
 
 
