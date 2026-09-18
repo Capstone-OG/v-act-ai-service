@@ -65,9 +65,15 @@ CHUNK_SIZE: int = 1000
 CHUNK_OVERLAP: int = 200
 
 # ---------------------------------------------------------------------------
-# Vector Store Constants
+# Database & Table Constants
 # ---------------------------------------------------------------------------
-COLLECTION_NAME: str = "rag_documents"
+CATALOG_TABLE_NAME: str = "documents"
+COLLECTION_NAME: str = "document_chunks"
+
+
+def get_connection_string() -> str:
+    """Return standard libpq connection string for psycopg."""
+    return DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
 
 # ---------------------------------------------------------------------------
 # Model Factories (cached singletons)
@@ -126,13 +132,44 @@ def get_pg_engine() -> PGEngine:
         ) from exc
 
 
-def init_vector_store_table() -> None:
-    """Ensure the pgvector table exists.
+def init_catalog_tables() -> None:
+    """Ensure catalog and vector extension exist."""
+    import psycopg
 
-    This is **not** idempotent — calling it when the table already exists
-    will raise a ``ProgrammingError``.  The function catches that and
-    logs a debug message so it is safe to call on every startup.
-    """
+    conn_str = get_connection_string()
+    try:
+        with psycopg.connect(conn_str) as conn:
+            with conn.cursor() as cur:
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {CATALOG_TABLE_NAME} (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        document_group_id UUID NOT NULL,
+                        file_name VARCHAR(255) NOT NULL,
+                        version INT NOT NULL DEFAULT 1,
+                        file_hash VARCHAR(64) NOT NULL,
+                        status VARCHAR(50) DEFAULT 'PENDING',
+                        is_current BOOLEAN DEFAULT FALSE,
+                        total_chunks INT DEFAULT 0,
+                        error_message TEXT,
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_docs_group_current 
+                        ON {CATALOG_TABLE_NAME}(document_group_id, is_current);
+                    CREATE INDEX IF NOT EXISTS idx_docs_filename 
+                        ON {CATALOG_TABLE_NAME}(file_name);
+                """)
+                conn.commit()
+                logger.info("Catalog table '%s' is ready.", CATALOG_TABLE_NAME)
+    except Exception as exc:
+        logger.error("Failed to initialize catalog table '%s': %s", CATALOG_TABLE_NAME, exc)
+        raise
+
+
+def init_vector_store_table() -> None:
+    """Ensure the pgvector table and catalog table exist."""
+    init_catalog_tables()
     engine = get_pg_engine()
     try:
         engine.init_vectorstore_table(

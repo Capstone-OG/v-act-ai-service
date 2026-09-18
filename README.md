@@ -87,20 +87,21 @@ run.bat
 - **`GET /api/v1/chat/sessions`**: List all active session IDs.
 - **`DELETE /api/v1/chat/sessions/{session_id}`**: Clear history for a session.
 
-### 2. Document Ingestion
-- **`POST /api/v1/documents/upload`**: Upload a PDF or DOCX file (`multipart/form-data`).
-- **`POST /api/v1/documents/text`**: Ingest plain text content directly:
+### 2. Document Ingestion & Versioning Management
+- **`POST /api/v1/documents/upload`**: Upload PDF or DOCX file with SHA-256 duplicate checking & background Graceful Swap.
+- **`POST /api/v1/documents/text`**: Ingest plain text content with `title` grouping and SHA-256 hash comparison.
+- **`GET /api/v1/documents`**: List all logical documents with their currently active version and total version count.
+- **`GET /api/v1/documents/{document_group_id}/versions`**: View full version history for a logical document.
+- **`POST /api/v1/documents/{document_group_id}/rollback`**: Rollback to an earlier version without recalculating embeddings:
   ```json
-  {
-    "content": "Nội dung tài liệu cần đưa vào hệ thống..."
-  }
+  { "version": 1 }
   ```
-- **`GET /api/v1/documents/stats`**: Get document count in pgvector.
+- **`DELETE /api/v1/documents/{document_group_id}`**: Soft delete (de-activate all versions from RAG while preserving history).
+- **`DELETE /api/v1/documents/{document_group_id}/purge`**: Permanently hard-delete a document and all its vector chunks.
+- **`GET /api/v1/documents/stats`**: Get detailed statistics of catalog records and active vector chunks.
 
 ### 3. System Health
 - **`GET /health`**: Health check, database connection status, and active models.
-
----
 
 ---
 

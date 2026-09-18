@@ -172,9 +172,10 @@ def build_conversational_rag_chain() -> RunnableWithMessageHistory:
     """
     llm = get_llm()
     vector_store = get_vector_store()
+    # Filter only active document chunks (is_current = True)
     retriever = vector_store.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": 4},
+        search_kwargs={"k": 4, "filter": {"is_current": True}},
     )
 
     # Step 1 — History-aware retriever (custom, with str() fix)

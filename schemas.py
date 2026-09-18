@@ -1,7 +1,8 @@
 """
 schemas.py — Pydantic Request & Response Models
 ================================================
-Defines structured schemas for the FastAPI REST API.
+Defines structured schemas for the FastAPI REST API with Document Versioning
+and Soft Delete support.
 """
 
 from __future__ import annotations
@@ -35,7 +36,10 @@ class ChatRequest(BaseModel):
 class DocumentSource(BaseModel):
     """Metadata and excerpt of a retrieved reference document."""
 
-    source: str = Field(..., description="Origin of the chunk (file name, user_input, etc.)")
+    source: str = Field(..., description="Origin of the chunk (file name, title, etc.)")
+    file_name: str | None = Field(default=None, description="Logical file name")
+    version: int | None = Field(default=None, description="Document version number")
+    document_id: str | None = Field(default=None, description="Physical version ID")
     doc_type: str | None = Field(default=None, description="Document type (pdf, docx, text)")
     page: int | str | None = Field(default=None, description="Page number if applicable")
     chunk_index: int | None = Field(default=None, description="Index of the chunk in document")
@@ -68,13 +72,19 @@ class SessionClearResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Document Ingestion Schemas
+# Document Ingestion & Versioning Schemas
 # ---------------------------------------------------------------------------
 
 
 class TextIngestRequest(BaseModel):
     """Payload for direct plain-text ingestion."""
 
+    title: str = Field(
+        default="custom_document",
+        min_length=1,
+        description="Logical document title/name used for version grouping.",
+        examples=["chinh_sach_cong_ty"],
+    )
     content: str = Field(
         ...,
         min_length=1,
@@ -84,19 +94,72 @@ class TextIngestRequest(BaseModel):
 
 
 class IngestResponse(BaseModel):
-    """Response returned after ingesting documents."""
+    """Response returned after processing or triggering document ingestion."""
 
     message: str = Field(..., description="Status message")
-    doc_type: str = Field(..., description="Type of ingested document (pdf, docx, text)")
-    source: str = Field(..., description="Source identifier or filename")
-    chunks_ingested: int = Field(..., description="Number of chunks stored in pgvector")
+    status: str = Field(
+        ...,
+        description="Ingestion status: READY, PROCESSING, UNCHANGED, or FAILED",
+        examples=["READY", "PROCESSING", "UNCHANGED"],
+    )
+    document_id: str = Field(..., description="Physical document version ID (UUID)")
+    document_group_id: str = Field(..., description="Logical document group ID (UUID)")
+    file_name: str = Field(..., description="Logical file or document title")
+    version: int = Field(..., description="Version number (1, 2, 3...)")
+    file_hash: str = Field(..., description="SHA-256 content checksum")
+    chunks_ingested: int = Field(default=0, description="Number of vector chunks generated")
+
+
+class DocumentVersionItem(BaseModel):
+    """Metadata of a single physical document version."""
+
+    id: str = Field(..., description="Physical document ID (UUID)")
+    document_group_id: str = Field(..., description="Logical document group ID (UUID)")
+    file_name: str = Field(..., description="File name or document title")
+    version: int = Field(..., description="Version number")
+    file_hash: str = Field(..., description="SHA-256 hash")
+    status: str = Field(..., description="Status (PENDING, PROCESSING, READY, FAILED)")
+    is_current: bool = Field(..., description="True if this version is actively served to RAG")
+    total_chunks: int = Field(..., description="Total vector chunks in database")
+    created_at: str = Field(..., description="Creation timestamp ISO")
+    error_message: str | None = Field(default=None, description="Error reason if FAILED")
+
+
+class DocumentGroupItem(BaseModel):
+    """Logical document summary with active version details."""
+
+    document_group_id: str = Field(..., description="Logical document group ID")
+    file_name: str = Field(..., description="Document file name")
+    active_version: int | None = Field(default=None, description="Currently active version number")
+    active_document_id: str | None = Field(default=None, description="ID of currently active version")
+    total_versions: int = Field(..., description="Total number of versions uploaded")
+    status: str = Field(..., description="Status of active version")
+    updated_at: str = Field(..., description="Last update timestamp ISO")
+
+
+class RollbackRequest(BaseModel):
+    """Payload to rollback a logical document to a previous version."""
+
+    version: int = Field(..., ge=1, description="The target version number to restore")
+
+
+class ActionResponse(BaseModel):
+    """Generic status response for rollback, delete, and purge actions."""
+
+    message: str
+    document_group_id: str
+    action: str
+    target_version: int | None = None
 
 
 class DocStatsResponse(BaseModel):
-    """Statistics of stored documents in the vector store."""
+    """Statistics of stored documents in the catalog and vector store."""
 
-    total_documents: int = Field(..., description="Total document chunks in pgvector table")
-    table_name: str = Field(..., description="PostgreSQL table name")
+    total_chunks: int = Field(..., description="Total chunks in document_chunks table")
+    active_chunks: int = Field(..., description="Active chunks serving RAG queries")
+    total_logical_documents: int = Field(..., description="Unique logical documents")
+    total_versions: int = Field(..., description="Total physical document records in catalog")
+    table_name: str = Field(..., description="Vector collection table name")
     embedding_dimensions: int = Field(..., description="Dimensions of vector embeddings")
 
 
@@ -112,4 +175,5 @@ class HealthResponse(BaseModel):
     database: str = Field(..., description="PostgreSQL + pgvector connection status")
     llm_model: str = Field(..., description="Configured Gemini chat model")
     embedding_model: str = Field(..., description="Configured Gemini embedding model")
-    total_documents: int = Field(..., description="Total chunks currently stored in vector DB")
+    total_active_chunks: int = Field(..., description="Active vector chunks currently serving RAG")
+    total_documents: int = Field(..., description="Total logical documents in catalog")

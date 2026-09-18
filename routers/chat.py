@@ -47,6 +47,9 @@ def chat_endpoint(payload: ChatRequest) -> ChatResponse:
         sources = [
             DocumentSource(
                 source=doc.metadata.get("source", "unknown"),
+                file_name=doc.metadata.get("file_name", doc.metadata.get("source")),
+                version=doc.metadata.get("version"),
+                document_id=doc.metadata.get("document_id"),
                 doc_type=doc.metadata.get("type"),
                 page=doc.metadata.get("page"),
                 chunk_index=doc.metadata.get("chunk_index"),

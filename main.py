@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse
 from config import (
     API_HOST,
     API_PORT,
+    CATALOG_TABLE_NAME,
     COLLECTION_NAME,
     DATABASE_URL,
     EMBEDDING_MODEL,
@@ -113,12 +114,19 @@ def health_check() -> HealthResponse:
     """Verify database connectivity and return system status."""
     db_status = "connected"
     total_docs = 0
+    active_chunks = 0
     conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
 
     try:
         with psycopg.connect(conn_str) as conn:
             with conn.cursor() as cur:
-                cur.execute(f"SELECT count(*) FROM {COLLECTION_NAME};")
+                cur.execute(
+                    f"SELECT count(*) FROM {COLLECTION_NAME} WHERE (langchain_metadata->>'is_current')::boolean = true;"
+                )
+                active_chunks = cur.fetchone()[0]
+                cur.execute(
+                    f"SELECT count(DISTINCT document_group_id) FROM {CATALOG_TABLE_NAME};"
+                )
                 total_docs = cur.fetchone()[0]
     except Exception as exc:
         logger.warning("Database health check failed: %s", exc)
@@ -131,6 +139,7 @@ def health_check() -> HealthResponse:
         database=db_status,
         llm_model=LLM_MODEL,
         embedding_model=EMBEDDING_MODEL,
+        total_active_chunks=active_chunks,
         total_documents=total_docs,
     )
 
