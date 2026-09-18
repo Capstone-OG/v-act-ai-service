@@ -33,7 +33,7 @@ docker run -d \
   -e POSTGRES_USER=rag_user \
   -e POSTGRES_PASSWORD=rag_password \
   -e POSTGRES_DB=rag_db \
-  -p 5432:5432 \
+  -p 5433:5432 \
   pgvector/pgvector:pg16
 
 # Wait a few seconds, then enable the extension:
@@ -88,7 +88,9 @@ Any other input is treated as a question to the AI.
 ├── config.py          # Configuration & model initialization
 ├── ingestion.py       # Document loading, chunking, vector storage
 ├── rag_engine.py      # Conversational RAG chain (LCEL)
-└── main.py            # Interactive CLI
+├── main.py            # Interactive CLI
+├── view_db.py         # Utility to inspect pgvector stored data
+└── run.bat            # One-click launcher for Windows
 ```
 
 ## Standalone Ingestion

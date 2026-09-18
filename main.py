@@ -20,7 +20,6 @@ Commands
 from __future__ import annotations
 
 import logging
-import sys
 
 from ingestion import ingest_document
 from rag_engine import ask, clear_session, get_session_ids

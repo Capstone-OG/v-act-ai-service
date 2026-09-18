@@ -16,7 +16,6 @@ import os
 import sys
 import logging
 from functools import lru_cache
-from typing import TYPE_CHECKING
 
 # Fix for Windows: psycopg async requires WindowsSelectorEventLoopPolicy
 if sys.platform == "win32":
@@ -25,9 +24,6 @@ if sys.platform == "win32":
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_postgres import PGEngine, PGVectorStore
-
-if TYPE_CHECKING:
-    pass
 
 # ---------------------------------------------------------------------------
 # Environment
@@ -78,7 +74,7 @@ COLLECTION_NAME: str = "rag_documents"
 def get_llm() -> ChatGoogleGenerativeAI:
     """Return a cached ChatGoogleGenerativeAI instance.
 
-    Uses ``gemini-2.5-flash`` with temperature=0 for deterministic,
+    Uses ``gemini-3.5-flash`` with temperature=0 for deterministic,
     context-grounded answers.
     """
     logger.info("Initializing LLM: %s", LLM_MODEL)
