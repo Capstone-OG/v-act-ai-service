@@ -221,29 +221,3 @@ def ingest_document(
 
     return len(chunks)
 
-
-# ---------------------------------------------------------------------------
-# Standalone execution (for quick testing)
-# ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import sys
-
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
-
-    if len(sys.argv) < 3:
-        print("Usage: python ingestion.py <type: pdf|docx|text> <source>")
-        print("  Examples:")
-        print('    python ingestion.py pdf  "path/to/document.pdf"')
-        print('    python ingestion.py docx "path/to/document.docx"')
-        print('    python ingestion.py text "Your raw text content here"')
-        sys.exit(1)
-
-    _doc_type = sys.argv[1]
-    _source = sys.argv[2]
-
-    try:
-        count = ingest_document(_source, _doc_type)  # type: ignore[arg-type]
-        print(f"\n✅ Ingested {count} chunk(s) into the vector database.")
-    except (FileNotFoundError, ValueError, ConnectionError) as e:
-        print(f"\n❌ Error: {e}")
-        sys.exit(1)

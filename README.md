@@ -102,24 +102,6 @@ run.bat
 
 ---
 
-## Interactive CLI (Optional)
-
-If you prefer testing directly in the terminal:
-```bash
-python cli.py
-```
-
-| Command | Description |
-|---------|-------------|
-| `/ingest pdf <path>` | Ingest a PDF file |
-| `/ingest docx <path>` | Ingest a DOCX file |
-| `/ingest text <content>` | Ingest plain text |
-| `/session <id>` | Switch conversation session |
-| `/sessions` | List active sessions |
-| `/clear` | Clear current session history |
-| `/help` | Show help |
-| `/quit` | Exit |
-
 ---
 
 ## Project Structure
@@ -135,7 +117,7 @@ python cli.py
 ├── ingestion.py       # Document loading, chunking, and pgvector storage
 ├── rag_engine.py      # Conversational RAG chain (LCEL) & streaming
 ├── main.py            # FastAPI application entrypoint & Swagger setup
-├── cli.py             # Optional interactive terminal chat
 ├── view_db.py         # CLI utility to inspect pgvector stored data
 └── run.bat            # Windows 1-click launcher for FastAPI server
 ```
+
