@@ -118,7 +118,6 @@ run.bat
 ├── ingestion.py       # Document loading, chunking, and pgvector storage
 ├── rag_engine.py      # Conversational RAG chain (LCEL) & streaming
 ├── main.py            # FastAPI application entrypoint & Swagger setup
-├── view_db.py         # CLI utility to inspect pgvector stored data
 └── run.bat            # Windows 1-click launcher for FastAPI server
 ```
 
