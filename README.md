@@ -25,51 +25,35 @@ User Question + Chat History
 
 ## Quick Start
 
-### 1. Start PostgreSQL + pgvector (Docker)
+### Cách 1: Khởi chạy 1-Click với Docker Compose (Khuyên dùng)
 
 ```bash
-docker run -d \
-  --name pgvector-rag \
-  -e POSTGRES_USER=rag_user \
-  -e POSTGRES_PASSWORD=rag_password \
-  -e POSTGRES_DB=rag_db \
-  -p 5433:5432 \
-  pgvector/pgvector:pg16
-
-# Wait a few seconds, then enable the extension:
-docker exec -it pgvector-rag psql -U rag_user -d rag_db -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-### 2. Install Dependencies
-
-```bash
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Linux/macOS:
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### 3. Configure Environment
-
-```bash
+# 1. Tạo file cấu hình từ template và điền GOOGLE_API_KEY
 cp .env.example .env
-# Edit .env with your actual GOOGLE_API_KEY
-```
 
-### 4. Run Server
-
-```bash
-# Run FastAPI server (default: port 8000)
-python main.py
-# Or with uvicorn directly:
-uvicorn main:app --reload
+# 2. Khởi chạy toàn bộ hệ thống (FastAPI + PostgreSQL pgvector)
+docker compose up -d --build
 ```
 
 - **Swagger UI Interactive Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 - **ReDoc Docs**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+### Cách 2: Khởi chạy thủ công cho môi trường Development
+
+```bash
+# 1. Khởi động PostgreSQL + pgvector
+docker run -d --name pgvector-rag -e POSTGRES_USER=rag_user -e POSTGRES_PASSWORD=rag_password -e POSTGRES_DB=rag_db -p 5433:5432 pgvector/pgvector:pg16
+
+# 2. Tạo virtual environment & cài đặt thư viện
+python -m venv .venv
+.venv\Scripts\activate   # Trên Windows
+pip install -r requirements.txt
+
+# 3. Chạy server FastAPI
+python main.py
+```
 
 ---
 
@@ -108,15 +92,18 @@ uvicorn main:app --reload
 ## Project Structure
 
 ```
-├── .env.example       # Environment variables template
-├── requirements.txt   # Dependencies (FastAPI, LangChain, pgvector, etc.)
-├── config.py          # Configuration & model factories (Gemini, PGEngine)
-├── schemas.py         # Pydantic models for request & response
-├── routers/           # FastAPI router modules
-│   ├── chat.py        # Conversational Q&A & streaming endpoints
-│   └── documents.py   # PDF/DOCX file upload & text ingestion
-├── ingestion.py       # Document loading, chunking, and pgvector storage
-├── rag_engine.py      # Conversational RAG chain (LCEL) & streaming
-└── main.py            # FastAPI application entrypoint & Swagger setup
+├── Dockerfile          # Production Docker image configuration
+├── docker-compose.yml  # Multi-container orchestration (App + Database)
+├── .dockerignore       # Excludes local files from Docker image
+├── .env.example        # Environment variables template
+├── requirements.txt    # Dependencies (FastAPI, LangChain, pgvector, etc.)
+├── config.py           # Configuration & model factories (Gemini, PGEngine)
+├── schemas.py          # Pydantic models for request & response
+├── routers/            # FastAPI router modules
+│   ├── chat.py         # Conversational Q&A & streaming endpoints
+│   └── documents.py    # Document upload, versioning & management
+├── ingestion.py        # Document loading, chunking, hash checking & swap
+├── rag_engine.py       # Conversational RAG chain (LCEL) & metadata filter
+└── main.py             # FastAPI application entrypoint & Swagger setup
 ```
 
