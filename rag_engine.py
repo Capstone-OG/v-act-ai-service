@@ -14,22 +14,30 @@ Builds the full Conversational RAG chain using modern LangChain LCEL:
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any
 
 try:
-    from langchain.chains import create_history_aware_retriever, create_retrieval_chain
+    from langchain.chains import create_retrieval_chain
     from langchain.chains.combine_documents import create_stuff_documents_chain
 except ModuleNotFoundError:
-    from langchain_classic.chains import create_history_aware_retriever, create_retrieval_chain
+    from langchain_classic.chains import create_retrieval_chain
     from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables import RunnableBranch, RunnableLambda
 from langchain_core.runnables.history import RunnableWithMessageHistory
 
 from config import get_llm, get_vector_store
 
 logger = logging.getLogger(__name__)
+
+# Suppress noisy warnings from LangChain and Google GenAI SDK
+warnings.filterwarnings("ignore", message=".*RunnableWithMessageHistory is deprecated.*")
+warnings.filterwarnings("ignore", message=".*fixed sampling defaults.*")
+warnings.filterwarnings("ignore", message=".*automatic function calling.*")
 
 # ---------------------------------------------------------------------------
 # In-memory session store  (dict[session_id] → ChatMessageHistory)
@@ -99,6 +107,41 @@ _qa_prompt = ChatPromptTemplate.from_messages(
 # ---------------------------------------------------------------------------
 
 
+def _build_history_aware_retriever(llm, retriever):
+    """Build a history-aware retriever with explicit str() casting.
+
+    This replaces ``create_history_aware_retriever`` to work around a
+    compatibility issue between Gemini 3.x models and the Google GenAI
+    embedding SDK:
+
+    - Gemini 3.x returns ``AIMessage.content`` as a ``list[dict]``
+      (with signature metadata), not a plain ``str``.
+    - ``StrOutputParser`` wraps this into a ``TextAccessor`` (a ``str``
+      subclass). The Google GenAI SDK's async ``aembed_query`` method
+      serializes ``TextAccessor`` incorrectly, causing a **500 INTERNAL**
+      server error.
+    - Adding ``RunnableLambda(str)`` after ``StrOutputParser`` casts the
+      value to a plain ``str``, which the SDK handles correctly.
+    """
+    # Rewrite chain: prompt → LLM → parse to str → cast to plain str
+    rewrite_chain = (
+        _contextualise_prompt
+        | llm
+        | StrOutputParser()
+        | RunnableLambda(str)
+    )
+
+    return RunnableBranch(
+        # If no chat history → pass input directly to retriever
+        (
+            lambda x: not x.get("chat_history", False),
+            (lambda x: x["input"]) | retriever,
+        ),
+        # If chat history exists → rewrite question, then retrieve
+        rewrite_chain | retriever,
+    ).with_config(run_name="history_aware_retriever")
+
+
 def build_conversational_rag_chain() -> RunnableWithMessageHistory:
     """Construct the full Conversational RAG chain with memory.
 
@@ -134,10 +177,8 @@ def build_conversational_rag_chain() -> RunnableWithMessageHistory:
         search_kwargs={"k": 4},
     )
 
-    # Step 1 — History-aware retriever
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, _contextualise_prompt
-    )
+    # Step 1 — History-aware retriever (custom, with str() fix)
+    history_aware_retriever = _build_history_aware_retriever(llm, retriever)
 
     # Step 2 — QA chain (stuff documents into prompt)
     qa_chain = create_stuff_documents_chain(llm, _qa_prompt)
