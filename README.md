@@ -64,8 +64,8 @@ cp .env.example .env
 ```bash
 # Run FastAPI server (default: port 8000)
 python main.py
-# Or on Windows:
-run.bat
+# Or with uvicorn directly:
+uvicorn main:app --reload
 ```
 
 - **Swagger UI Interactive Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
@@ -117,7 +117,6 @@ run.bat
 │   └── documents.py   # PDF/DOCX file upload & text ingestion
 ├── ingestion.py       # Document loading, chunking, and pgvector storage
 ├── rag_engine.py      # Conversational RAG chain (LCEL) & streaming
-├── main.py            # FastAPI application entrypoint & Swagger setup
-└── run.bat            # Windows 1-click launcher for FastAPI server
+└── main.py            # FastAPI application entrypoint & Swagger setup
 ```
 
