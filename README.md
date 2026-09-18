@@ -59,13 +59,55 @@ cp .env.example .env
 # Edit .env with your actual GOOGLE_API_KEY
 ```
 
-### 4. Run
+### 4. Run Server
 
 ```bash
+# Run FastAPI server (default: port 8000)
 python main.py
+# Or on Windows:
+run.bat
 ```
 
-## CLI Commands
+- **Swagger UI Interactive Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc Docs**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+---
+
+## REST API Endpoints
+
+### 1. Conversational Chat
+- **`POST /api/v1/chat`**: Ask a question with conversational memory.
+  ```json
+  {
+    "question": "V-Act cung cấp dịch vụ gì?",
+    "session_id": "user-123"
+  }
+  ```
+- **`POST /api/v1/chat/stream`**: Stream answer token-by-token using Server-Sent Events (SSE).
+- **`GET /api/v1/chat/sessions`**: List all active session IDs.
+- **`DELETE /api/v1/chat/sessions/{session_id}`**: Clear history for a session.
+
+### 2. Document Ingestion
+- **`POST /api/v1/documents/upload`**: Upload a PDF or DOCX file (`multipart/form-data`).
+- **`POST /api/v1/documents/text`**: Ingest plain text content directly:
+  ```json
+  {
+    "content": "Nội dung tài liệu cần đưa vào hệ thống..."
+  }
+  ```
+- **`GET /api/v1/documents/stats`**: Get document count in pgvector.
+
+### 3. System Health
+- **`GET /health`**: Health check, database connection status, and active models.
+
+---
+
+## Interactive CLI (Optional)
+
+If you prefer testing directly in the terminal:
+```bash
+python cli.py
+```
 
 | Command | Description |
 |---------|-------------|
@@ -78,24 +120,22 @@ python main.py
 | `/help` | Show help |
 | `/quit` | Exit |
 
-Any other input is treated as a question to the AI.
+---
 
 ## Project Structure
 
 ```
-├── .env.example       # Environment template
-├── requirements.txt   # Python dependencies
-├── config.py          # Configuration & model initialization
-├── ingestion.py       # Document loading, chunking, vector storage
-├── rag_engine.py      # Conversational RAG chain (LCEL)
-├── main.py            # Interactive CLI
-├── view_db.py         # Utility to inspect pgvector stored data
-└── run.bat            # One-click launcher for Windows
-```
-
-## Standalone Ingestion
-
-```bash
-python ingestion.py pdf "path/to/document.pdf"
-python ingestion.py text "Your raw text content here"
+├── .env.example       # Environment variables template
+├── requirements.txt   # Dependencies (FastAPI, LangChain, pgvector, etc.)
+├── config.py          # Configuration & model factories (Gemini, PGEngine)
+├── schemas.py         # Pydantic models for request & response
+├── routers/           # FastAPI router modules
+│   ├── chat.py        # Conversational Q&A & streaming endpoints
+│   └── documents.py   # PDF/DOCX file upload & text ingestion
+├── ingestion.py       # Document loading, chunking, and pgvector storage
+├── rag_engine.py      # Conversational RAG chain (LCEL) & streaming
+├── main.py            # FastAPI application entrypoint & Swagger setup
+├── cli.py             # Optional interactive terminal chat
+├── view_db.py         # CLI utility to inspect pgvector stored data
+└── run.bat            # Windows 1-click launcher for FastAPI server
 ```

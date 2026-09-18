@@ -250,6 +250,26 @@ def ask(
         raise RuntimeError(f"RAG chain invocation failed: {exc}") from exc
 
 
+def ask_stream(
+    question: str,
+    session_id: str = "default",
+):
+    """Stream answer tokens from the Conversational RAG chain.
+
+    Yields strings containing partial answer text as it is generated.
+    """
+    chain = _ensure_chain()
+    try:
+        for chunk in chain.stream(
+            {"input": question},
+            config={"configurable": {"session_id": session_id}},
+        ):
+            if "answer" in chunk and chunk["answer"]:
+                yield chunk["answer"]
+    except Exception as exc:
+        raise RuntimeError(f"RAG stream failed: {exc}") from exc
+
+
 def get_session_ids() -> list[str]:
     """Return all active session IDs."""
     return list(_session_store.keys())

@@ -1,175 +1,148 @@
 """
-main.py — Interactive CLI for Conversational RAG
-==================================================
-Provides a terminal-based interface to:
-
-- Ingest documents (PDF, DOCX, plain text) into pgvector.
-- Chat with the AI using multi-turn conversation memory.
-- Switch between sessions and manage history.
-
-Commands
---------
-/ingest <type> <source>   — Ingest a document (type: pdf | docx | text).
-/session <id>             — Switch to a different session.
-/sessions                 — List all active sessions.
-/clear                    — Clear current session history.
-/help                     — Show available commands.
-/quit                     — Exit the program.
+main.py — FastAPI Application Entrypoint
+==========================================
+Main REST API service for Conversational RAG with Google Gemini and pgvector.
 """
 
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
-from ingestion import ingest_document
-from rag_engine import ask, clear_session, get_session_ids
+import psycopg
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+
+from config import (
+    API_HOST,
+    API_PORT,
+    COLLECTION_NAME,
+    DATABASE_URL,
+    EMBEDDING_MODEL,
+    LLM_MODEL,
+    init_vector_store_table,
+)
+from routers.chat import router as chat_router
+from routers.documents import router as documents_router
+from schemas import HealthResponse
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+logger = logging.getLogger("v-act-ai-service")
+
 
 # ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-BANNER = r"""
-╔══════════════════════════════════════════════════╗
-║       🤖  Conversational RAG System  🤖         ║
-║  Powered by Gemini + LangChain + PgVector       ║
-╚══════════════════════════════════════════════════╝
-"""
-
-HELP_TEXT = """
-Available commands:
-  /ingest <type> <source>  — Ingest a document into the knowledge base.
-                             type: pdf | docx | text
-                             source: file path (pdf/docx) or quoted text.
-  /session <id>            — Switch to a named session.
-  /sessions                — List active sessions.
-  /clear                   — Clear current session's chat history.
-  /help                    — Show this help message.
-  /quit                    — Exit the program.
-
-Anything else is treated as a question to the AI.
-"""
-
-
-# ---------------------------------------------------------------------------
-# CLI Handlers
+# Lifespan Event Handler
 # ---------------------------------------------------------------------------
 
 
-def _handle_ingest(args: str) -> None:
-    """Parse and execute an /ingest command.
-
-    Expected format: ``/ingest <type> <source>``
-    """
-    parts = args.strip().split(maxsplit=1)
-    if len(parts) < 2:
-        print("⚠️  Usage: /ingest <pdf|docx|text> <file_path_or_text>")
-        return
-
-    doc_type, source = parts[0], parts[1]
-
-    if doc_type not in ("pdf", "docx", "text"):
-        print(f"⚠️  Unknown type '{doc_type}'. Use: pdf, docx, or text.")
-        return
-
-    print(f"📥 Ingesting ({doc_type}): {source[:80]}{'...' if len(source) > 80 else ''}")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle manager: ensure vector store table exists on startup."""
+    logger.info("Starting up V-Act AI Service...")
     try:
-        count = ingest_document(source, doc_type)  # type: ignore[arg-type]
-        print(f"✅ Successfully ingested {count} chunk(s) into the knowledge base.")
-    except FileNotFoundError as exc:
-        print(f"❌ File not found: {exc}")
-    except ValueError as exc:
-        print(f"❌ Invalid input: {exc}")
-    except ConnectionError as exc:
-        print(f"❌ Database error: {exc}")
+        init_vector_store_table()
+        logger.info("PostgreSQL pgvector collection '%s' ready.", COLLECTION_NAME)
+    except Exception as exc:
+        logger.error("Failed to initialize vector store table: %s", exc)
+
+    yield
+
+    logger.info("Shutting down V-Act AI Service...")
 
 
-def _handle_ask(question: str, session_id: str) -> None:
-    """Send a question to the RAG chain and display the answer."""
+# ---------------------------------------------------------------------------
+# FastAPI App Initialization
+# ---------------------------------------------------------------------------
+
+app = FastAPI(
+    title="V-Act AI Service — Conversational RAG API",
+    description=(
+        "Production-ready Conversational RAG backend powered by LangChain (LCEL), "
+        "Google Gemini (LLM & Embeddings), and PostgreSQL + pgvector."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+# ---------------------------------------------------------------------------
+# CORS Middleware
+# ---------------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Open for development; adjust for production origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------------------------------
+# Routers Mounting
+# ---------------------------------------------------------------------------
+
+app.include_router(chat_router)
+app.include_router(documents_router)
+
+
+# ---------------------------------------------------------------------------
+# Root & Health Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    """Redirect root path to interactive Swagger documentation."""
+    return RedirectResponse(url="/docs")
+
+
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["System"],
+    summary="Health check & system status",
+)
+def health_check() -> HealthResponse:
+    """Verify database connectivity and return system status."""
+    db_status = "connected"
+    total_docs = 0
+    conn_str = DATABASE_URL.replace("postgresql+psycopg://", "postgresql://")
+
     try:
-        result = ask(question, session_id=session_id)
-        answer = result.get("answer", "No answer generated.")
-        context_docs = result.get("context", [])
+        with psycopg.connect(conn_str) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT count(*) FROM {COLLECTION_NAME};")
+                total_docs = cur.fetchone()[0]
+    except Exception as exc:
+        logger.warning("Database health check failed: %s", exc)
+        db_status = f"disconnected: {exc}"
 
-        print(f"\n🤖 AI: {answer}")
+    overall_status = "healthy" if db_status == "connected" else "degraded"
 
-        if context_docs:
-            print(f"\n📚 Sources ({len(context_docs)} document(s) retrieved):")
-            for i, doc in enumerate(context_docs, 1):
-                source = doc.metadata.get("source", "unknown")
-                page = doc.metadata.get("page", "")
-                page_info = f" (page {page})" if page != "" else ""
-                snippet = doc.page_content[:120].replace("\n", " ")
-                print(f"   [{i}] {source}{page_info}: {snippet}...")
-    except RuntimeError as exc:
-        print(f"❌ Error: {exc}")
-
-
-# ---------------------------------------------------------------------------
-# Main Loop
-# ---------------------------------------------------------------------------
-
-
-def main() -> None:
-    """Run the interactive CLI loop."""
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(levelname)s | %(name)s | %(message)s",
+    return HealthResponse(
+        status=overall_status,
+        database=db_status,
+        llm_model=LLM_MODEL,
+        embedding_model=EMBEDDING_MODEL,
+        total_documents=total_docs,
     )
 
-    print(BANNER)
-    print("Type /help for available commands, or just ask a question.\n")
 
-    current_session = "default"
-    print(f"📌 Current session: {current_session}\n")
-
-    while True:
-        try:
-            user_input = input(f"[{current_session}] You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n👋 Goodbye!")
-            break
-
-        if not user_input:
-            continue
-
-        # --- Command dispatch ---
-        if user_input.lower() in ("/quit", "/exit", "/q"):
-            print("👋 Goodbye!")
-            break
-
-        elif user_input.lower() == "/help":
-            print(HELP_TEXT)
-
-        elif user_input.lower().startswith("/ingest"):
-            _handle_ingest(user_input[len("/ingest"):])
-
-        elif user_input.lower().startswith("/session"):
-            new_id = user_input[len("/session"):].strip()
-            if new_id:
-                current_session = new_id
-                print(f"📌 Switched to session: {current_session}")
-            else:
-                print(f"📌 Current session: {current_session}")
-
-        elif user_input.lower() == "/sessions":
-            sessions = get_session_ids()
-            if sessions:
-                print("📋 Active sessions: " + ", ".join(sessions))
-            else:
-                print("📋 No active sessions yet.")
-
-        elif user_input.lower() == "/clear":
-            clear_session(current_session)
-            print(f"🗑️  Cleared history for session '{current_session}'.")
-
-        elif user_input.startswith("/"):
-            print(f"⚠️  Unknown command: {user_input.split()[0]}. Type /help.")
-
-        else:
-            # Regular question → send to RAG
-            _handle_ask(user_input, current_session)
-
-        print()  # blank line between turns
-
+# ---------------------------------------------------------------------------
+# Direct Execution Launcher
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run(
+        "main:app",
+        host=API_HOST,
+        port=API_PORT,
+        reload=True,
+    )

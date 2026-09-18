@@ -47,6 +47,10 @@ if not DATABASE_URL:
         "Copy .env.example → .env and provide a PostgreSQL+psycopg connection string."
     )
 
+# Server settings
+API_HOST: str = os.environ.get("API_HOST", "0.0.0.0")
+API_PORT: int = int(os.environ.get("API_PORT", "8000"))
+
 # ---------------------------------------------------------------------------
 # Model Constants
 # ---------------------------------------------------------------------------
